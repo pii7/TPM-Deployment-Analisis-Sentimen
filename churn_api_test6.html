@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>McD Sentiment Analyzer</title>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Fredoka One', sans-serif;
+            padding: 20px;
+            background: linear-gradient(to bottom, #fff8e1, #ffe0b2);
+            text-align: center;
+        }
+        h1 {
+            color: #d32f2f;
+            font-size: 2.5em;
+        }
+        p { font-size: 1.1em; }
+        input[type=text] {
+            width: 70%;
+            padding: 12px;
+            border-radius: 25px;
+            border: 2px solid #fbc02d;
+            font-size: 1em;
+            outline: none;
+        }
+        input[type=text]:focus { border-color: #d32f2f; }
+        button {
+            padding: 12px 25px;
+            margin-left: 10px;
+            background-color: #fbc02d;
+            color: #d32f2f;
+            border: none;
+            border-radius: 25px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        button:hover {
+            background-color: #d32f2f;
+            color: #fff;
+            transform: scale(1.1);
+        }
+        .result { margin-top: 30px; display: flex; flex-direction: column; align-items: center; gap: 15px; }
+        .model-result {
+            width: 80%;
+            padding: 15px;
+            border-radius: 15px;
+            background: #fff3e0;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            transition: transform 0.2s;
+        }
+        .model-result:hover { transform: translateY(-5px); }
+        .model-result h3 { margin: 0 0 5px; color: #d32f2f; }
+        .emoji { font-size: 2em; }
+        .confetti {
+            position: absolute;
+            width: 10px; height: 10px;
+            background-color: #fbc02d;
+            animation: fall 1s linear forwards;
+        }
+        @keyframes fall {
+            0% { transform: translateY(0) rotate(0deg); opacity:1; }
+            100% { transform: translateY(500px) rotate(360deg); opacity:0; }
+        }
+    </style>
+</head>
+<body>
+    <h1>🍔 McD Sentiment Analyzer 🍟</h1>
+    <p>Enter your McDonald's review below:</p>
+
+    <input type="text" id="reviewText" placeholder="Example: The fries were fresh and crispy!">
+    <button onclick="submitReview()">Analyze</button>
+
+    <div id="results" class="result"></div>
+
+    <script>
+        function createConfetti() {
+            for(let i=0;i<30;i++){
+                const conf = document.createElement('div');
+                conf.classList.add('confetti');
+                conf.style.left = Math.random()*window.innerWidth+'px';
+                conf.style.backgroundColor = `hsl(${Math.random()*360}, 70%, 50%)`;
+                document.body.appendChild(conf);
+                setTimeout(()=> conf.remove(), 1000);
+            }
+        }
+
+        async function submitReview() {
+            const text = document.getElementById("reviewText").value.trim();
+            if (!text) {
+                alert("Please enter a review first!");
+                return;
+            }
+
+            const resultsDiv = document.getElementById("results");
+            resultsDiv.innerHTML = "<p>Analyzing...</p>";
+
+            try {
+                const response = await fetch("http://127.0.0.1:5000/predict", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ text })
+                });
+
+                const data = await response.json();
+
+                if (data.error) {
+                    resultsDiv.innerHTML = `<p style="color:red;">Error: ${data.error}</p>`;
+                    return;
+                }
+
+                let html = "";
+                data.results.forEach(res => {
+
+                    res.per_model.forEach(m => {
+                        let emoji = "😐";
+                        if(m.pred_label === "pos") emoji = "😊🍔";
+                        else if(m.pred_label === "neg") emoji = "😢🍟";
+
+                        html += `
+                        <div class="model-result">
+                            <h3>${m.model} <span class="emoji">${emoji}</span></h3>
+                            <p><strong>Prediction:</strong> ${m.pred_label}</p>
+                            ${m.probs ? `<p>Probability: neg=${m.probs.neg.toFixed(2)}, pos=${m.probs.pos.toFixed(2)}</p>` : ""}
+                        </div>`;
+                    });
+
+                    if (res.wordcloud) {
+                        html += `
+                        <div class="model-result" style="padding:20px; text-align:center;">
+                            <h3>WordCloud</h3>
+                            <img src="data:image/png;base64,${res.wordcloud}"
+                                style="width:70%; margin-top:10px; border-radius:15px;">
+                        </div>`;
+                    }
+
+                });
+
+                resultsDiv.innerHTML = html;
+
+                if(data.results.every(r => r.per_model.every(m => m.pred_label==="pos"))) {
+                    createConfetti();
+                }
+
+            } catch (err) {
+                resultsDiv.innerHTML = `<p style="color:red;">Failed to connect to API: ${err}</p>`;
+            }
+        }
+    </script>
+</body>
+</html>
